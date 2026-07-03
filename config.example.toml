@@ -1,0 +1,43 @@
+# hi-res-exporter example configuration.
+# All settings are optional; the values below are the defaults unless noted.
+
+# Root of the proc filesystem (override for testing).
+#procfs_root = "/proc"
+
+[server]
+# Bind address for /metrics, /healthz, /readyz.
+listen = "127.0.0.1:9918"
+
+[sampling]
+# Collector polling period. Sub-second values are supported; the recommended
+# range is 100ms-500ms (below that, kernel jiffy quantization adds noise).
+period = "200ms"
+# Guardrail: `period` may not be configured below this.
+min_period = "50ms"
+# How often percentile snapshots are recomputed for scraping.
+snapshot_interval = "1s"
+
+[aggregation]
+# Rolling windows over which percentiles are computed. Short windows expose
+# bursts; longer windows compare against traditional averaged views.
+windows = ["10s", "60s"]
+quantiles = [0.5, 0.9, 0.95, 0.99]
+# Hard cap on distinct series held in memory.
+max_series = 5000
+
+[collectors]
+cpu = true        # /proc/stat: CPU mode %, context switches, interrupts
+psi = true        # /proc/pressure/*: CPU/memory/I/O stall percentages
+run_queue = true  # /proc/loadavg: runnable task count
+softnet = true    # /proc/net/softnet_stat: RX backlog pressure
+vmstat = true     # /proc/vmstat: major page fault rate
+
+[collectors.disk]  # /proc/diskstats: queue depth and utilization
+enabled = true
+# Only sample these devices (empty = auto-detect, skipping partitions and
+# pseudo devices like loop/ram/zram).
+include = []
+exclude = []
+# Also export a host-wide sum as device="__all__".
+aggregate_all = true
+max_devices = 64
