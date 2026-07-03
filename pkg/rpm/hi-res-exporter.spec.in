@@ -12,10 +12,10 @@ bursts visible to dashboards and alerts.
 
 %install
 install -Dm755 %{_sourcedir}/hi-res-exporter %{buildroot}%{_bindir}/hi-res-exporter
-install -Dm644 %{_sourcedir}/hi-res-exporter.service %{buildroot}%{_unitdir}/hi-res-exporter.service
+install -Dm644 %{_sourcedir}/hi-res-exporter.service %{buildroot}/usr/lib/systemd/system/hi-res-exporter.service
 install -Dm644 %{_sourcedir}/config.example.toml %{buildroot}%{_sysconfdir}/hi-res-exporter/config.toml
 
 %files
 %{_bindir}/hi-res-exporter
-%{_unitdir}/hi-res-exporter.service
+/usr/lib/systemd/system/hi-res-exporter.service
 %config(noreplace) %{_sysconfdir}/hi-res-exporter/config.toml
