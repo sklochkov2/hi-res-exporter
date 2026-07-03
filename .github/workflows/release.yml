@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build static musl binaries for each architecture
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: amd64
+            rpm_arch: x86_64
+          - target: aarch64-unknown-linux-musl
+            arch: arm64
+            rpm_arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        uses: taiki-e/install-action@cross
+
+      - name: Build static binary
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/hi-res-exporter
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Run tests before publishing
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test
+
+  # ---------------------------------------------------------------------------
+  # Package binaries and create the GitHub release
+  # ---------------------------------------------------------------------------
+  release:
+    name: Package & Release
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: meta
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Building release for version ${version}"
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # -- Source tarball -----------------------------------------------------
+      - name: Create source tarball
+        run: |
+          git archive --format=tar.gz \
+            --prefix="hi-res-exporter-${{ steps.meta.outputs.version }}/" \
+            -o "hi-res-exporter-${{ steps.meta.outputs.version }}.tar.gz" \
+            HEAD
+
+      # -- Binary tarballs ----------------------------------------------------
+      - name: Create binary tarballs
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          for arch in amd64 arm64; do
+            staging="hi-res-exporter-${version}-linux-${arch}"
+            mkdir "${staging}"
+            cp "artifacts/binary-${arch}/hi-res-exporter" "${staging}/hi-res-exporter"
+            cp LICENSE README.md config.example.toml "${staging}/"
+            cp pkg/hi-res-exporter.service "${staging}/"
+            chmod 755 "${staging}/hi-res-exporter"
+            tar czf "${staging}.tar.gz" "${staging}"
+          done
+
+      # -- Deb packages -------------------------------------------------------
+      - name: Build deb packages
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          for arch in amd64 arm64; do
+            pkg="hi-res-exporter_${version}-1_${arch}"
+            mkdir -p "${pkg}/DEBIAN"
+            mkdir -p "${pkg}/usr/bin"
+            mkdir -p "${pkg}/usr/lib/systemd/system"
+            mkdir -p "${pkg}/etc/hi-res-exporter"
+            mkdir -p "${pkg}/usr/share/doc/hi-res-exporter"
+
+            cp "artifacts/binary-${arch}/hi-res-exporter" "${pkg}/usr/bin/hi-res-exporter"
+            chmod 755 "${pkg}/usr/bin/hi-res-exporter"
+
+            cp pkg/hi-res-exporter.service "${pkg}/usr/lib/systemd/system/hi-res-exporter.service"
+            cp config.example.toml "${pkg}/etc/hi-res-exporter/config.toml"
+            cp pkg/deb/copyright "${pkg}/usr/share/doc/hi-res-exporter/copyright"
+
+            sed -e "s/@VERSION@/${version}/" \
+              -e "s/@ARCH@/${arch}/" \
+              pkg/deb/control.in > "${pkg}/DEBIAN/control"
+
+            dpkg-deb --build --root-owner-group "${pkg}"
+          done
+
+      # -- RPM packages -------------------------------------------------------
+      - name: Build rpm packages
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          topdir="$(pwd)/rpmbuild"
+
+          for pair in "amd64:x86_64" "arm64:aarch64"; do
+            deb_arch="${pair%%:*}"
+            rpm_arch="${pair##*:}"
+
+            mkdir -p "${topdir}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+            cp "artifacts/binary-${deb_arch}/hi-res-exporter" "${topdir}/SOURCES/hi-res-exporter"
+            cp pkg/hi-res-exporter.service "${topdir}/SOURCES/hi-res-exporter.service"
+            cp config.example.toml "${topdir}/SOURCES/config.example.toml"
+            cp LICENSE "${topdir}/SOURCES/LICENSE"
+            cp README.md "${topdir}/SOURCES/README.md"
+
+            sed "s/@VERSION@/${version}/" \
+              pkg/rpm/hi-res-exporter.spec.in > "${topdir}/SPECS/hi-res-exporter.spec"
+
+            rpmbuild -bb "${topdir}/SPECS/hi-res-exporter.spec" \
+              --define "_topdir ${topdir}" \
+              --target "${rpm_arch}"
+
+            cp "${topdir}"/RPMS/${rpm_arch}/*.rpm .
+
+            rm -rf "${topdir}"
+          done
+
+      # -- Checksums ----------------------------------------------------------
+      - name: Generate checksums
+        run: |
+          sha256sum \
+            hi-res-exporter-*.tar.gz \
+            hi-res-exporter_*.deb \
+            hi-res-exporter-*.rpm \
+            > SHA256SUMS
+
+      # -- GitHub Release -----------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            hi-res-exporter-${{ steps.meta.outputs.version }}.tar.gz
+            hi-res-exporter-*-linux-*.tar.gz
+            hi-res-exporter_*.deb
+            hi-res-exporter-*.rpm
+            SHA256SUMS

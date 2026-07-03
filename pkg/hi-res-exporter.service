@@ -1,0 +1,29 @@
+[Unit]
+Description=High-resolution Linux load Prometheus exporter
+Documentation=https://github.com/sklochkov2/hi-res-exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hi-res-exporter --config /etc/hi-res-exporter/config.toml
+Restart=on-failure
+RestartSec=5
+
+# Run unprivileged: the exporter only reads /proc.
+DynamicUser=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

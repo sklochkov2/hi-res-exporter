@@ -1,0 +1,11 @@
+Package: hi-res-exporter
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: @ARCH@
+Maintainer: sklochkov2 <sklochkov2@users.noreply.github.com>
+Depends: systemd
+Description: High-resolution Linux load Prometheus exporter
+ A Prometheus exporter that samples Linux load signals at high frequency
+ and exports percentiles over short rolling windows, making brief load
+ bursts visible to dashboards and alerts.

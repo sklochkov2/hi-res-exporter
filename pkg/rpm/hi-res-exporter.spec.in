@@ -1,0 +1,21 @@
+Name: hi-res-exporter
+Version: @VERSION@
+Release: 1
+Summary: High-resolution Linux load Prometheus exporter
+License: MIT
+URL: https://github.com/sklochkov2/hi-res-exporter
+
+%description
+A Prometheus exporter that samples Linux load signals at high frequency
+and exports percentiles over short rolling windows, making brief load
+bursts visible to dashboards and alerts.
+
+%install
+install -Dm755 %{_sourcedir}/hi-res-exporter %{buildroot}%{_bindir}/hi-res-exporter
+install -Dm644 %{_sourcedir}/hi-res-exporter.service %{buildroot}%{_unitdir}/hi-res-exporter.service
+install -Dm644 %{_sourcedir}/config.example.toml %{buildroot}%{_sysconfdir}/hi-res-exporter/config.toml
+
+%files
+%{_bindir}/hi-res-exporter
+%{_unitdir}/hi-res-exporter.service
+%config(noreplace) %{_sysconfdir}/hi-res-exporter/config.toml
