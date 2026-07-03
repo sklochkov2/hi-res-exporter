@@ -5,6 +5,14 @@ Summary: High-resolution Linux load Prometheus exporter
 License: MIT
 URL: https://github.com/sklochkov2/hi-res-exporter
 
+# This spec packages pre-built static musl binaries. In CI, rpmbuild runs on
+# x86_64 Ubuntu while also packaging aarch64 artifacts, so the default RPM
+# buildroot policy scripts must not run host `strip`/`objdump` over the
+# target binary. Debug packages are also not useful for these release artifacts.
+%global debug_package %{nil}
+%global __strip /bin/true
+%global __objdump /bin/true
+
 %description
 A Prometheus exporter that samples Linux load signals at high frequency
 and exports percentiles over short rolling windows, making brief load
